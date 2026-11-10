@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { pool } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -27,32 +27,31 @@ export async function POST(req: Request) {
     });
 
     if (!res.ok) {
-      const errorData = await res.text();
-      console.error("❌ GEMINI API REJECTED:", errorData);
-      return NextResponse.json({ error: "Gemini rejected the request. Check terminal." }, { status: 500 });
+      return NextResponse.json({ error: "Gemini rejected the request." }, { status: 500 });
     }
 
     const data = await res.json();
-    
-    if (!data.candidates || !data.candidates[0]?.content?.parts[0]?.text) {
-      console.error("❌ GEMINI RETURNED BAD DATA:", data);
-      return NextResponse.json({ error: "Gemini did not return a valid text response." }, { status: 500 });
-    }
-
-    const text = data.candidates[0].content.parts[0].text;
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
     const latencyMs = Date.now() - started;
 
-    const prompt = await prisma.prompt.create({ data: { text: promptText } });
-    const response = await prisma.modelResponse.create({
-      data: { promptId: prompt.id, responseText: text, latencyMs, modelName: model },
-    });
+    const promptRes = await pool.query(
+      `INSERT INTO "Prompt" (text) VALUES ($1) RETURNING id`,
+      [promptText]
+    );
+    const promptId = promptRes.rows[0].id;
+
+    const responseRes = await pool.query(
+      `INSERT INTO "ModelResponse" ("promptId", "responseText", "latencyMs", "modelName") 
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [promptId, text, latencyMs, model]
+    );
+    const responseId = responseRes.rows[0].id;
 
     return NextResponse.json({
-      promptId: prompt.id, responseId: response.id, responseText: text, latencyMs, modelName: model
+      promptId, responseId, responseText: text, latencyMs, modelName: model
     });
 
   } catch (error: any) {
-    console.error("❌ GENERATE ROUTE CRASH:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
