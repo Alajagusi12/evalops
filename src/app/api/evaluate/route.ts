@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { pool } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -9,30 +9,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "responseId is required" }, { status: 400 });
     }
 
-    const user = await prisma.user.upsert({
-      where: { email: "demo@evalops.dev" },
-      update: {},
-      create: { email: "demo@evalops.dev", name: "QA Engineer" },
-    });
+    const userRes = await pool.query(
+      `INSERT INTO "User" (id, email, name) 
+       VALUES (gen_random_uuid()::text, 'demo@evalops.dev', 'QA Engineer') 
+       ON CONFLICT (email) DO UPDATE SET name = 'QA Engineer' RETURNING id`
+    );
+    const userId = userRes.rows[0].id;
 
     const avg = (factualityScore + reasoningScore + safetyScore) / 3;
     const verdict = avg >= 4 ? "PASS" : avg >= 3 ? "PARTIAL" : "FAIL";
 
-    const evaluation = await prisma.evaluation.create({
-      data: {
-        responseId,
-        evaluatorId: user.id,
-        factualityScore,
-        reasoningScore,
-        safetyScore,
-        agentFeedback: rationale,
-        verdict,
-      },
-    });
+    await pool.query(
+      `INSERT INTO "Evaluation" ("responseId", "evaluatorId", "factualityScore", "reasoningScore", "safetyScore", "agentFeedback", verdict) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [responseId, userId, factualityScore, reasoningScore, safetyScore, rationale, verdict]
+    );
 
-    return NextResponse.json({ success: true, evaluation });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error("❌ EVALUATE API ERROR:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
