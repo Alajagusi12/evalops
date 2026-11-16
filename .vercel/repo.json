@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_mN0f0x1DWfGIMfXSdOomDDlnwKth",
+      "name": "evalops",
+      "directory": ".",
+      "orgId": "team_Ep2IyEZughuBgon87cVlkVLe"
+    }
+  ]
+}

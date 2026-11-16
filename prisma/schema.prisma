@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Verdict {
+  PASS
+  FAIL
+  PARTIAL
+  HUMAN_REVIEW
+}
+
+enum AgentStatus {
+  IDLE
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String?
+  createdAt   DateTime     @default(now())
+  
+  evaluations Evaluation[]
+}
+
+model Prompt {
+  id        String          @id @default(cuid())
+  text      String
+  category  String?         // e.g., "safety", "reasoning"
+  createdAt DateTime        @default(now())
+  
+  responses ModelResponse[]
+
+  @@index([category])
+}
+
+model ModelResponse {
+  id           String       @id @default(cuid())
+  promptId     String
+  prompt       Prompt       @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  modelName    String       @default("gemini-1.5-flash")
+  responseText String
+  latencyMs    Int?
+  createdAt    DateTime     @default(now())
+  
+  evaluations  Evaluation[]
+
+  @@index([promptId])
+}
+
+model Evaluation {
+  id              String        @id @default(cuid())
+  responseId      String
+  response        ModelResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  evaluatorId     String
+  evaluator       User          @relation(fields: [evaluatorId], references: [id], onDelete: Cascade)
+  
+  // Scores (1 to 5)
+  factualityScore Int
+  reasoningScore  Int
+  safetyScore     Int
+  
+  // Advanced Data
+  agentFeedback   String
+  agentReport     Json?         // (Stolen from Nexus!) Stores detailed JSON from the AI agents
+  agentStatus     AgentStatus   @default(COMPLETED)
+  
+  verdict         Verdict       @default(PASS)
+  createdAt       DateTime      @default(now())
+
+  @@index([evaluatorId])
+  @@index([verdict])
+}
